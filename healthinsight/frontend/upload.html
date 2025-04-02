@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Health Report Upload</title>
+    <style>
+        body { font-family: Arial; max-width: 800px; margin: 20px auto; padding: 20px; }
+        .upload-box { border: 2px dashed #ccc; padding: 20px; text-align: center; }
+        .upload-btn { background: #4CAF50; color: white; padding: 10px 20px; border: none; cursor: pointer; }
+        .progress { display: none; margin-top: 20px; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <div class="upload-box">
+        <h2>Upload Health Report</h2>
+        <form id="upload-form">
+            <input type="file" id="file-input" name="file" accept=".pdf,.jpg,.png" required>
+            <br><br>
+            <button type="submit" class="upload-btn">Upload</button>
+        </form>
+        <div id="progress" class="progress">Processing...</div>
+        <p id="status"></p>
+    </div>
+
+    <script>
+        document.getElementById("upload-form").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const progress = document.getElementById("progress");
+            const status = document.getElementById("status");
+            
+            progress.style.display = "block";
+            const formData = new FormData();
+            formData.append("file", document.getElementById("file-input").files[0]);
+            
+            try {
+                const response = await fetch("/upload", {
+                    method: "POST",
+                    body: formData
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    status.className = "success";
+                    status.textContent = "Upload successful! Redirecting to dashboard...";
+                    setTimeout(() => {
+                        window.location.href = "/dashboard";
+                    }, 1500);
+                } else {
+                    throw new Error(result.detail || 'Upload failed');
+                }
+            } catch (error) {
+                status.className = "error";
+                status.textContent = "Error: " + error.message;
+            } finally {
+                progress.style.display = "none";
+            }
+        });
+    </script>
+</body>
+</html>

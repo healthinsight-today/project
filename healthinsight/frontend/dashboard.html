@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>HealthInsight Dashboard</title>
+    <style>
+        body { font-family: Arial; max-width: 1200px; margin: 20px auto; padding: 20px; }
+        .nav { background: #f5f5f5; padding: 10px; margin-bottom: 20px; }
+        .nav a { margin-right: 20px; text-decoration: none; color: #333; }
+        .card { border: 1px solid #ddd; padding: 20px; margin-bottom: 20px; border-radius: 5px; }
+        .reports-list { list-style: none; padding: 0; }
+        .reports-list li { padding: 10px; border-bottom: 1px solid #eee; }
+    </style>
+</head>
+<body>
+    <div class="nav">
+        <a href="/dashboard">Dashboard</a>
+        <a href="/reports">Reports</a>
+        <a href="/">Upload New</a>
+    </div>
+    
+    <h1>Health Dashboard</h1>
+    
+    <div class="card">
+        <h2>Recent Reports</h2>
+        <ul class="reports-list" id="recentReports">
+            <!-- Reports will be loaded dynamically -->
+        </ul>
+    </div>
+
+    <script>
+        // Load recent reports
+        async function loadReports() {
+            try {
+                const response = await fetch('/api/reports/recent');
+                const data = await response.json();
+                const list = document.getElementById('recentReports');
+                data.reports.forEach(report => {
+                    list.innerHTML += `
+                        <li>
+                            <strong>${report.filename}</strong>
+                            <p>Uploaded: ${new Date(report.uploaded_at).toLocaleDateString()}</p>
+                        </li>
+                    `;
+                });
+            } catch (error) {
+                console.error('Error loading reports:', error);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', loadReports);
+    </script>
+</body>
+</html>
