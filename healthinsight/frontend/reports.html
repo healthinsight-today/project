@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Health Reports</title>
+    <style>
+        body { font-family: Arial; max-width: 1200px; margin: 20px auto; padding: 20px; }
+        .nav { background: #f5f5f5; padding: 10px; margin-bottom: 20px; }
+        .nav a { 
+            margin-right: 20px; 
+            text-decoration: none; 
+            color: #333;
+            padding: 5px 15px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        .nav a:hover { 
+            background: #e9ecef;
+        }
+        .nav a.active {
+            background: #4CAF50;
+            color: white;
+        }
+        .report-card { 
+            border: 1px solid #ddd; 
+            padding: 20px; 
+            margin-bottom: 20px; 
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .report-metadata { color: #666; font-size: 0.9em; }
+        .report-values { 
+            margin-top: 15px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        .value-item {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .value-item.abnormal {
+            background: #fff3f3;
+            border-left: 3px solid #e74c3c;
+        }
+        .value-name { font-weight: bold; color: #2c3e50; }
+        .value-number { font-size: 1.2em; color: #3498db; }
+        .reference {
+            color: #666;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+        .page-number {
+            color: #666;
+            font-size: 0.8em;
+            position: absolute;
+            right: 10px;
+            top: 10px;
+        }
+        .category-section { 
+            margin-top: 20px;
+            border-top: 1px solid #eee;
+            padding-top: 15px;
+        }
+        .category-title {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        .abnormal { color: #e74c3c; }
+        .patient-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .actions {
+            margin-bottom: 20px;
+        }
+        .scan-btn {
+            background: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .scan-btn:hover {
+            background: #45a049;
+        }
+        .scan-progress {
+            display: none;
+            margin: 10px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .scan-status {
+            color: #666;
+            margin-bottom: 5px;
+        }
+        .status-message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .status-message.info { background: #e3f2fd; color: #1976d2; }
+        .status-message.success { background: #e8f5e9; color: #2e7d32; }
+        .status-message.warning { background: #fff3e0; color: #f57c00; }
+        .status-message.error { background: #ffebee; color: #c62828; }
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: #f0f0f0;
+            margin-top: 5px;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            background: #4CAF50;
+            transition: width 0.3s ease-in-out;
+        }
+    </style>
+</head>
+<body>
+    <div class="nav">
+        <a href="/dashboard" id="dashboard-link">Dashboard</a>
+        <a href="/reports" id="reports-link" class="active">Reports</a>
+        <a href="/" id="upload-link">Upload New</a>
+    </div>
+    
+    <h1>Health Reports</h1>
+    <div class="actions">
+        <button id="scanBtn" class="scan-btn">Scan Directory</button>
+        <div id="scanProgress" class="scan-progress">
+            <div id="statusMessage" class="status-message info">
+                <div id="scanStatus">Processing files...</div>
+                <div class="progress-bar">
+                    <span class="progress-bar-fill" id="scanProgressBar" style="width: 0%"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="reportsList"></div>
+
+    <script>
+        function updateNavigation() {
+            const path = window.location.pathname;
+            document.querySelectorAll('.nav a').forEach(link => {
+                link.classList.remove('active');
+            });
+            
+            if (path === '/dashboard') {
+                document.getElementById('dashboard-link').classList.add('active');
+            } else if (path === '/reports') {
+                document.getElementById('reports-link').classList.add('active');
+            } else if (path === '/') {
+                document.getElementById('upload-link').classList.add('active');
+            }
+        }
+
+        async function loadReports() {
+            try {
+                const reportsContainer = document.getElementById('reportsList');
+                reportsContainer.innerHTML = '<p>Loading reports...</p>';
+                
+                const response = await fetch('/api/reports/recent');
+                const data = await response.json();
+                console.log('Reports data:', data);
+                
+                if (!data.reports || data.reports.length === 0) {
+                    reportsContainer.innerHTML = '<p>No reports found. Try scanning the directory.</p>';
+                    return;
+                }
+                
+                reportsContainer.innerHTML = '';
+                
+                for (const report of data.reports) {
+                    const fileSize = report.size ? (report.size / 1024 / 1024).toFixed(2) : 'N/A';
+                    const reportDate = new Date(report.uploaded_at * 1000).toLocaleDateString();
+                    const ocr = report.ocr_data || {};
+                    const testResults = ocr.test_results?.by_category || {};
+                    
+                    let reportHtml = `
+                        <div class="report-card">
+                            <h2>${report.filename}</h2>
+                            <div class="report-metadata">
+                                <p>Uploaded: ${reportDate}</p>
+                                <p>Size: ${fileSize} MB | Pages: ${report.page_count || 'N/A'}</p>
+                            </div>`;
+
+                    if (ocr.patient_info) {
+                        reportHtml += `
+                            <div class="patient-info">
+                                ${Object.entries(ocr.patient_info).map(([key, value]) => `
+                                    <p><strong>${key.replace('_', ' ').toUpperCase()}:</strong> ${value}</p>
+                                `).join('')}
+                            </div>`;
+                    }
+
+                    console.log('OCR data for report:', report.ocr_data);
+
+                    if (testResults && Object.keys(testResults).length > 0) {
+                        for (const [category, tests] of Object.entries(testResults)) {
+                            if (tests && tests.length > 0) {
+                                reportHtml += `
+                                    <div class="category-section">
+                                        <h3 class="category-title">${category}</h3>
+                                        <div class="report-values">
+                                            ${tests.map(test => `
+                                                <div class="value-item ${test.is_abnormal ? 'abnormal' : ''}" style="position: relative;">
+                                                    <div class="page-number">Page ${test.page_number || 1}</div>
+                                                    <div class="value-name">${test.name.toUpperCase()}</div>
+                                                    <div class="value-number">
+                                                        ${formatTestValue(test)}
+                                                    </div>
+                                                    <div class="reference">
+                                                        ${formatReferenceRange(test.reference_range)}
+                                                    </div>
+                                                </div>
+                                            `).join('')}
+                                        </div>
+                                    </div>`;
+                            }
+                        }
+                    } else {
+                        reportHtml += '<p>No test results found</p>';
+                    }
+
+                    if (ocr.report_summary) {
+                        reportHtml += `
+                            <div class="report-summary">
+                                <p><strong>Abnormal Results:</strong> ${ocr.report_summary.abnormal_count || 0}</p>
+                            </div>`;
+                    }
+
+                    reportHtml += '</div>';
+                    reportsContainer.innerHTML += reportHtml;
+                }
+            } catch (error) {
+                console.error('Error loading reports:', error);
+                const reportsContainer = document.getElementById('reportsList');
+                reportsContainer.innerHTML = `
+                    <p class="error">Error loading reports: ${error.message}</p>
+                    <button onclick="loadReports()">Retry</button>
+                `;
+            }
+        }
+
+        function formatTestValue(test) {
+            const value = test.value.toLocaleString(undefined, {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 2
+            });
+            return `${value}${test.unit ? ' ' + test.unit : ''}`;
+        }
+
+        function formatReferenceRange(range) {
+            if (!range) return '';
+            range = range.replace(/ref:?/i, '').trim();
+            return `Reference: ${range}`;
+        }
+
+        async function pollProcessingStatus(processIds) {
+            const scanBtn = document.getElementById('scanBtn');
+            const scanProgress = document.getElementById('scanProgress');
+            const scanStatus = document.getElementById('scanStatus');
+            const progressBar = document.getElementById('scanProgressBar');
+            const statusMessage = document.getElementById('statusMessage');
+            
+            try {
+                if (!processIds || processIds.length === 0) {
+                    showMessage('warning', 'No files to process');
+                    scanBtn.disabled = false;
+                    return;
+                }
+
+                statusMessage.style.display = 'block';
+                let completed = 0;
+                let cached = 0;
+                let errors = 0;
+                let isPolling = true;
+                
+                console.log(`Starting to poll ${processIds.length} files`);
+
+                while (isPolling && completed < processIds.length) {
+                    completed = 0;
+                    cached = 0;
+                    errors = 0;
+
+                    for (const id of processIds) {
+                        try {
+                            const response = await fetch(`/api/status/${id}`);
+                            const status = await response.json();
+                            console.log('Status for', id, ':', status);
+                            
+                            if (status.status === 'completed') {
+                                completed++;
+                                if (status.from_cache) {
+                                    cached++;
+                                }
+                            } else if (status.status === 'error') {
+                                errors++;
+                                completed++;
+                            }
+                        } catch (error) {
+                            console.error('Status check error:', error);
+                            errors++;
+                        }
+                    }
+
+                    const progress = (completed / processIds.length) * 100;
+                    progressBar.style.width = `${progress}%`;
+
+                    let statusText = `Processing: ${completed}/${processIds.length}`;
+                    if (cached > 0) statusText += ` (${cached} from cache)`;
+                    if (errors > 0) statusText += ` (${errors} errors)`;
+                    
+                    scanStatus.textContent = statusText;
+                    
+                    if (completed < processIds.length) {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    } else {
+                        isPolling = false;
+                    }
+                }
+
+                // Refresh the reports list
+                await loadReports();
+
+                if (errors > 0) {
+                    showMessage('warning', `Completed with ${errors} errors (${cached} from cache)`);
+                } else {
+                    showMessage('success', `Processing complete! (${cached} from cache)`);
+                }
+
+            } catch (error) {
+                console.error('Polling error:', error);
+                showMessage('error', 'Error monitoring process');
+            } finally {
+                scanBtn.disabled = false;
+                setTimeout(() => {
+                    scanProgress.style.display = 'none';
+                }, 3000);
+            }
+        }
+
+        function showMessage(type, text) {
+            const statusMessage = document.getElementById('statusMessage');
+            statusMessage.className = `status-message ${type}`;
+            statusMessage.style.display = 'block';
+            document.getElementById('scanStatus').textContent = text;
+        }
+
+        document.getElementById('scanBtn').addEventListener('click', async () => {
+            const scanBtn = document.getElementById('scanBtn');
+            scanBtn.disabled = true;
+            
+            try {
+                showMessage('info', 'Scanning directory...');
+                
+                const response = await fetch('/api/scan-directory', { method: 'POST' });
+                const result = await response.json();
+                console.log('Scan result:', result);
+                
+                if (result.status === 'empty') {
+                    showMessage('warning', result.message);
+                    scanBtn.disabled = false;
+                } else if (result.process_ids && result.process_ids.length > 0) {
+                    await pollProcessingStatus(result.process_ids);
+                } else {
+                    showMessage('warning', 'No files to process');
+                    scanBtn.disabled = false;
+                }
+            } catch (error) {
+                console.error('Scan error:', error);
+                showMessage('error', 'Error scanning directory');
+                scanBtn.disabled = false;
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            updateNavigation();
+            loadReports();
+        });
+    </script>
+</body>
+</html>
