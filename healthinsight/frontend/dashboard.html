@@ -174,12 +174,36 @@
                     `;
                 });
 
-                // Update statistics
+                // Update statistics with more detailed info
                 const statsContainer = document.getElementById('reportStats');
                 statsContainer.classList.remove('loading');
-                const totalTests = data.reports.reduce((sum, r) => sum + (r.total_tests || 0), 0);
-                const totalAbnormal = data.reports.reduce((sum, r) => sum + (r.abnormal_count || 0), 0);
                 
+                let totalCategories = new Set();
+                let categoryStats = {};
+                
+                data.reports.forEach(report => {
+                    const ocr = report.ocr_data || {};
+                    const testResults = ocr.test_results?.by_category || {};
+                    
+                    Object.keys(testResults).forEach(category => {
+                        totalCategories.add(category);
+                        if (!categoryStats[category]) {
+                            categoryStats[category] = {
+                                total: 0,
+                                abnormal: 0
+                            };
+                        }
+                        
+                        testResults[category].forEach(test => {
+                            categoryStats[category].total++;
+                            if (test.is_abnormal) {
+                                categoryStats[category].abnormal++;
+                            }
+                        });
+                    });
+                });
+
+                // Render detailed statistics
                 statsContainer.innerHTML = `
                     <div class="stats-grid">
                         <div class="stat-item">
@@ -187,15 +211,18 @@
                             <p>${data.reports.length}</p>
                         </div>
                         <div class="stat-item">
-                            <h3>Total Tests</h3>
-                            <p>${totalTests}</p>
+                            <h3>Categories</h3>
+                            <p>${totalCategories.size}</p>
                         </div>
-                        <div class="stat-item">
-                            <h3>Abnormal Results</h3>
-                            <p>${totalAbnormal}</p>
-                        </div>
+                        ${Object.entries(categoryStats).map(([category, stats]) => `
+                            <div class="stat-item">
+                                <h3>${category}</h3>
+                                <p>${stats.total} tests (${stats.abnormal} abnormal)</p>
+                            </div>
+                        `).join('')}
                     </div>
                 `;
+                
             } catch (error) {
                 console.error('Error loading reports:', error);
                 document.getElementById('recentReports').innerHTML = 

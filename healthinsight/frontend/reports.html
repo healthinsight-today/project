@@ -45,6 +45,7 @@
         }
         .value-name { font-weight: bold; color: #2c3e50; }
         .value-number { font-size: 1.2em; color: #3498db; }
+        .value-number.abnormal { color: #e74c3c; }
         .reference {
             color: #666;
             font-size: 0.9em;
@@ -67,6 +68,7 @@
             margin-bottom: 10px;
         }
         .abnormal { color: #e74c3c; }
+        .abnormal-marker { margin-left: 5px; }
         .patient-info {
             background: #f8f9fa;
             padding: 15px;
@@ -208,14 +210,18 @@
                                         <h3 class="category-title">${category}</h3>
                                         <div class="report-values">
                                             ${tests.map(test => `
-                                                <div class="value-item ${test.is_abnormal ? 'abnormal' : ''}" style="position: relative;">
+                                                <div class="value-item ${test.is_abnormal ? 'abnormal' : ''}" 
+                                                     style="position: relative;">
                                                     <div class="page-number">Page ${test.page_number || 1}</div>
-                                                    <div class="value-name">${test.name.toUpperCase()}</div>
-                                                    <div class="value-number">
+                                                    <div class="value-name">
+                                                        ${(test.test_name || test.name || 'Unknown Test').toUpperCase()}
+                                                        ${test.is_abnormal ? '<span class="abnormal-marker">⚠️</span>' : ''}
+                                                    </div>
+                                                    <div class="value-number ${test.is_abnormal ? 'abnormal' : ''}">
                                                         ${formatTestValue(test)}
                                                     </div>
                                                     <div class="reference">
-                                                        ${formatReferenceRange(test.reference_range)}
+                                                        ${formatReferenceRange(test.reference_range || test.normal_range)}
                                                     </div>
                                                 </div>
                                             `).join('')}
@@ -248,17 +254,40 @@
         }
 
         function formatTestValue(test) {
+            if (!test || test.value === undefined || test.value === null) {
+                return 'N/A';
+            }
+            
+            if (typeof test.value === 'string') {
+                return test.value;  // Return textual results as-is
+            }
+            
             const value = test.value.toLocaleString(undefined, {
                 minimumFractionDigits: 0,
                 maximumFractionDigits: 2
             });
-            return `${value}${test.unit ? ' ' + test.unit : ''}`;
+            
+            const unit = test.unit ? ` ${test.unit.replace('/', ' per ')}` : '';
+            return `${value}${unit}`;
         }
 
         function formatReferenceRange(range) {
-            if (!range) return '';
-            range = range.replace(/ref:?/i, '').trim();
-            return `Reference: ${range}`;
+            if (!range) return 'No reference range';
+            
+            // Handle structured ranges
+            if (typeof range === 'object') {
+                if (range.categories) {
+                    return Object.entries(range.categories)
+                        .map(([cat, vals]) => `${cat}: ${vals.join('-')}`)
+                        .join('<br>');
+                }
+                return 'Invalid range format';
+            }
+            
+            // Handle simple ranges
+            range = String(range).replace(/ref:?/i, '').trim();
+            range = range.replace(/(\d+\.?\d*)\s*-\s*(\d+\.?\d*)/, '$1 to $2');
+            return `Normal Range: ${range}`;
         }
 
         async function pollProcessingStatus(processIds) {
