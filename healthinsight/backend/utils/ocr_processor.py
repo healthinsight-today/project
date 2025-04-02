@@ -22,17 +22,26 @@ class BloodReportOCRProcessor:
         Initialize any resources (like Tesseract config, etc.)
         """
         self.tesseract_config = '--oem 3 --psm 6'
+        self.blood_markers = [
+            'hemoglobin', 'hematology', 'wbc', 'rbc', 
+            'platelets', 'blood count', 'cholesterol'
+        ]
 
     async def process_file(self, file_path: str) -> Dict[str, Any]:
         """Process file and ensure results"""
         try:
+            if not file_path.lower().endswith('.pdf'):
+                raise Exception("Invalid file type. Only PDF files are supported.")
+
             logger.info(f"Processing file: {file_path}")
             
             # Extract text
-            if file_path.lower().endswith(".pdf"):
-                text = self._extract_text_from_pdf(file_path)
-            else:
-                text = self._extract_text_from_image(file_path)
+            text = self._extract_text_from_pdf(file_path)
+            
+            # Quick validation that this is a blood report
+            text_lower = text.lower()
+            if not any(marker in text_lower for marker in self.blood_markers):
+                raise Exception("This doesn't appear to be a blood test report")
 
             if not text.strip():
                 raise Exception("No text extracted from file")

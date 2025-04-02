@@ -34,6 +34,25 @@ from .models import UploadResponse, ReportData
 from .utils.file_utils import get_unique_filename, is_duplicate_content, cleanup_temp_files
 from .utils.cache_utils import ReportCache
 
+# Add after imports
+ALLOWED_EXTENSIONS = {'.pdf'}
+BLOOD_REPORT_PATTERNS = [
+    'blood', 'test', 'laboratory', 'lab', 'pathology', 'diagnostic'
+]
+
+def is_valid_report(filename: str, file_path: str = None) -> bool:
+    """Check if file is a valid blood report based on name and content"""
+    ext = Path(filename).suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        return False
+        
+    # Check filename for blood report indicators
+    name_lower = filename.lower()
+    if not any(pattern in name_lower for pattern in BLOOD_REPORT_PATTERNS):
+        return False
+        
+    return True
+
 app = FastAPI()
 
 # Create uploads directory if not exists
@@ -89,7 +108,11 @@ async def get_recent_reports(background_tasks: BackgroundTasks):
     
     # Only process files that actually exist
     for f in os.listdir("uploads"):
-        if f.startswith("temp_"):
+        if f.startswith("temp_") or f == ".gitkeep":
+            continue
+
+        if not is_valid_report(f):
+            logger.debug(f"Skipping non-blood report file: {f}")
             continue
 
         file_path = os.path.join("uploads", f)
@@ -194,8 +217,16 @@ async def process_upload(process_id: str, file_path: str):
 
 @app.post("/upload")
 async def upload_file(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+    """Handle file upload with validation"""
     temp_path = None
     try:
+        # Validate file type
+        if not is_valid_report(file.filename):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid file type. Please upload a blood report PDF."
+            )
+
         # Clean up old cache
         if report_cache:
             report_cache.cleanup_orphaned_cache()
@@ -269,6 +300,10 @@ async def scan_directory(background_tasks: BackgroundTasks):
 
     # Queue all files for processing
     for f in found_files:
+        if not is_valid_report(f):
+            logger.debug(f"Skipping non-blood report file: {f}")
+            continue
+
         file_path = os.path.join("uploads", f)
         process_id = str(uuid.uuid4())
         logger.info(f"Queueing {f} for processing with ID: {process_id}")
